@@ -1,22 +1,44 @@
 {
   "manifest_version": 3,
   "name": "Dominion Lens — 日本語デッキ分析",
-  "version": "0.1.1",
+  "version": "0.1.2",
   "description": "dominion.games の友達・CPU戦でデッキ内訳、アクションエンド・コンボの割合、財宝の期待金量、ドロー確率、王国カードの評価を表示します。",
   "minimum_chrome_version": "111",
-  "permissions": ["storage"],
-  "background": { "service_worker": "background.js" },
+  "permissions": [
+    "storage"
+  ],
   "content_scripts": [
     {
-      "matches": ["https://dominion.games/*", "https://www.dominion.games/*"],
-      "js": ["lib/zones.js", "bridge.js"],
+      "matches": [
+        "https://dominion.games/*",
+        "https://www.dominion.games/*"
+      ],
+      "js": [
+        "lib/zones.js",
+        "bridge.js"
+      ],
       "world": "MAIN",
       "run_at": "document_start"
     },
     {
-      "matches": ["https://dominion.games/*", "https://www.dominion.games/*"],
-      "js": ["lib/catalog.js", "lib/analysis.js", "lib/protocol.js", "lib/history.js", "lib/view.js", "content.js"],
+      "matches": [
+        "https://dominion.games/*",
+        "https://www.dominion.games/*"
+      ],
+      "js": [
+        "lib/build-info.js",
+        "lib/catalog.js",
+        "lib/analysis.js",
+        "lib/protocol.js",
+        "lib/history.js",
+        "lib/view.js",
+        "content.js"
+      ],
       "run_at": "document_idle"
     }
-  ]
+  ],
+  "version_name": "0.1.2 (5fea6dd1b8e9)",
+  "background": {
+    "service_worker": "background.js"
+  }
 }

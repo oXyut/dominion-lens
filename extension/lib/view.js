@@ -26,6 +26,8 @@
   const typeColor = c => c.types.includes("ACTION") ? colors.action : c.types.includes("TREASURE") ? colors.treasure : c.types.includes("VICTORY") ? colors.victory : c.types.includes("CURSE") ? colors.curse : colors.other;
   class Panel {
     constructor(host, { onChange, onHistoryAction, settings = {} } = {}) {
+      // Keep the identity of the code loaded by this page, even after disk updates.
+      this.buildInfo = ns.buildInfo;
       this.root = host.attachShadow({ mode: "open" });
       this.settings = { tab: "deck", zone: "owned", draws: 5, minimized: false, basic: false, budget: "", ...settings };
       this.snapshot = { status: "waiting" }; this.onChange = onChange || (() => {});
@@ -135,7 +137,7 @@
         const warnings = player.issues.map(i => `<div class="notice">${escape(i)}</div>`).join("");
         body = select + warnings + (s.tab === "kingdom" ? this.kingdom(player) : this.deck(player, own));
       }
-      this.root.innerHTML = `<style>${css}</style><section class="panel" aria-label="Dominion Lens デッキ分析"><header><div class="logo">${symbol}</div><div class="brand"><b>Dominion Lens</b><small>デッキを知る。次の一手を考える。</small></div><button class="icon" data-action="minimize" aria-label="パネルを折りたたむ">−</button></header><div class="status ${data.demo ? "demo" : ""}"><span class="dot"></span>${escape(status)}</div><nav class="tabs" role="tablist" aria-label="分析メニュー">${[["deck", "デッキ"], ["kingdom", "王国"], ["history", "履歴"], ["guide", "使い方"]].map(([key, label]) => `<button id="tab-${key}" role="tab" aria-controls="lens-main" aria-selected="${s.tab === key}" data-action="tab" data-value="${key}">${label}</button>`).join("")}</nav>${this.onHistoryAction ? `<div class="history-status ${this.history.status?.code === "error" ? "error" : ""}" role="status">${escape(this.history.status?.message)}</div>` : ""}<main id="lens-main" role="tabpanel" aria-labelledby="tab-${s.tab}">${body}</main><div class="footer"><span>ローカルで分析 · データ送信なし</span><span>v0.1.1</span></div></section>`;
+      this.root.innerHTML = `<style>${css}</style><section class="panel" aria-label="Dominion Lens デッキ分析"><header><div class="logo">${symbol}</div><div class="brand"><b>Dominion Lens</b><small>デッキを知る。次の一手を考える。</small></div><button class="icon" data-action="minimize" aria-label="パネルを折りたたむ">−</button></header><div class="status ${data.demo ? "demo" : ""}"><span class="dot"></span>${escape(status)}</div><nav class="tabs" role="tablist" aria-label="分析メニュー">${[["deck", "デッキ"], ["kingdom", "王国"], ["history", "履歴"], ["guide", "使い方"]].map(([key, label]) => `<button id="tab-${key}" role="tab" aria-controls="lens-main" aria-selected="${s.tab === key}" data-action="tab" data-value="${key}">${label}</button>`).join("")}</nav>${this.onHistoryAction ? `<div class="history-status ${this.history.status?.code === "error" ? "error" : ""}" role="status">${escape(this.history.status?.message)}</div>` : ""}<main id="lens-main" role="tabpanel" aria-labelledby="tab-${s.tab}">${body}</main><div class="footer"><span>ローカルで分析 · データ送信なし</span><span data-build="${escape(this.buildInfo.build)}" aria-label="適用版">v${escape(this.buildInfo.version)} · ${escape(this.buildInfo.build)}</span></div></section>`;
       this.root.querySelector("main").scrollTop = scroll;
       for (const details of this.root.querySelectorAll("details[data-card]")) if (expanded.includes(details.dataset.card)) details.open = true;
       const historyPolicy = this.root.querySelector(".history-policy");

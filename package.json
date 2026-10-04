@@ -1,11 +1,12 @@
 {
   "name": "dominion-companion-jp",
-  "version": "0.1.1",
+  "version": "0.1.2",
   "private": true,
   "type": "module",
   "scripts": {
     "test": "node --test --test-concurrency=2 --test-reporter=tap tests/*.test.js",
     "check": "node scripts/check.mjs",
+    "build:info": "node scripts/build-info.mjs --write",
     "demo": "node scripts/serve.mjs",
     "package": "node scripts/package.mjs"
   }

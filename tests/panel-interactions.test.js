@@ -10,7 +10,7 @@ test('Panel number input operations in an isolated real browser', {
   const browser = await launchBrowser(executable);
   t.after(() => browser.close());
   t.diagnostic(`Panel browser: ${(await browser.command('Browser.getVersion')).product}`);
-  for (const file of ['catalog', 'analysis', 'view']) {
+  for (const file of ['build-info', 'catalog', 'analysis', 'view']) {
     await browser.evaluate(await readFile(new URL(`../extension/lib/${file}.js`, import.meta.url), 'utf8'));
   }
   await browser.evaluate(`
@@ -45,6 +45,36 @@ test('Panel number input operations in an isolated real browser', {
       settings: structuredClone(panel.settings), changes: changes.length
     });
   `);
+
+  await t.test('the updated panel shows the opening ten cards, 3.50 coins and an ordinary Estate trash', async () => {
+    await browser.evaluate("resetPanel('draws'); document.getElementById('outside').focus();");
+    assert.equal(await browser.evaluate('root.querySelector(".stat.primary .number").textContent'), '10枚');
+    assert.equal(await browser.evaluate('root.querySelector(".stat:not(.primary) .number").textContent'), '3.50金');
+    await browser.evaluate(`
+      const trashed = fixture();
+      trashed.logs.push({ index: 2, type: 'TRASH', player: 0, cards: [{ name: 'Estate', count: 1 }] });
+      panel.update(trashed);
+    `);
+    assert.equal(await browser.evaluate('root.querySelector(".stat.primary .number").textContent'), '9枚');
+    assert.equal(await browser.evaluate('[...root.querySelectorAll(".card-row")].find(row => row.textContent.includes("Estate")).querySelector(".copies").textContent'), '2');
+    assert.doesNotMatch(await browser.evaluate('root.querySelector("main").textContent'), /ログにないカードの移動があり/);
+  });
+
+  await t.test('a page keeps its loaded build identity until a new panel is created', async () => {
+    const loaded = await browser.evaluate('({ ...DominionLens.buildInfo })');
+    await browser.evaluate("resetPanel('draws'); document.getElementById('outside').focus();");
+    const expected = `v${loaded.version} · ${loaded.build}`;
+    assert.equal(await browser.evaluate('root.querySelector("[data-build]").textContent'), expected);
+    await browser.evaluate(`
+      window.originalBuildInfo = DominionLens.buildInfo;
+      DominionLens.buildInfo = Object.freeze({ version: ${JSON.stringify(loaded.version)}, build: '000000000000' });
+      panel.update(fixture(2));
+    `);
+    assert.equal(await browser.evaluate('root.querySelector("[data-build]").textContent'), expected);
+    await browser.evaluate("resetPanel('draws');");
+    assert.equal(await browser.evaluate('root.querySelector("[data-build]").textContent'), `v${loaded.version} · 000000000000`);
+    await browser.evaluate('DominionLens.buildInfo = originalBuildInfo;');
+  });
 
   for (const key of ['budget', 'draws']) {
     await t.test(`${key}: unchanged blur immediately displays a single received snapshot`, async () => {
