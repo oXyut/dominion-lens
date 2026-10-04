@@ -2,5 +2,5 @@
 (() => {
   "use strict";
   const ns = globalThis.DominionLens ||= {};
-  ns.buildInfo = Object.freeze({"version":"0.1.2","build":"e344ccbfbeea"});
+  ns.buildInfo = Object.freeze({"version":"0.1.2","build":"5fea6dd1b8e9"});
 })();

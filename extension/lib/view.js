@@ -11,6 +11,7 @@
     header{padding:18px 20px 12px;display:flex;align-items:center;gap:11px;background:#fff}.logo{width:35px;height:35px;padding:7px;border-radius:10px;background:#143d37;color:#dceba7}.brand{flex:1}.brand b{font-size:18px;letter-spacing:-.4px;color:#183c35}.brand small{display:block;color:#6d7e75;font-size:10px;letter-spacing:.7px}.icon{font-size:21px;width:30px;height:30px;border-radius:7px}.icon:hover{background:#edf0eb}
     .status{padding:0 20px 14px;background:#fff;color:#667c70;font-size:11px;display:flex;align-items:center;gap:7px}.dot{width:6px;height:6px;border-radius:50%;background:#5c8f60}.status.demo .dot{background:#ca8f3c}
     .tabs{display:flex;padding:0 16px;background:#fff;border-bottom:1px solid #dce2db;gap:7px}.tabs button{padding:10px 13px;border-bottom:3px solid transparent;font-weight:600;color:#6d7b76}.tabs button[aria-selected=true]{border-color:#204f43;color:#204f43}
+    .history-status{padding:7px 18px;border-bottom:1px solid #dce2db;font-size:10px;color:#587156;background:#f1f5ec}.history-status.error{color:#876332;background:#fff2df}.history-controls{display:flex;gap:8px;align-items:center;justify-content:space-between}.history-controls label{font-size:12px}.history-button{padding:7px 10px;border:1px solid #cbd5cb;border-radius:7px;background:#fff;font-size:11px}.history-button:disabled{opacity:.5;cursor:default}.history-item{border:1px solid #dce4d6;border-radius:10px;background:#fff;padding:12px;margin:12px 0;overflow-wrap:anywhere}.history-item h2{font-size:12px;margin:0 0 6px}.history-item p{font-size:11px;margin:6px 0;color:#607466}.history-actions{display:flex;gap:8px;margin-top:10px}.history-log{list-style:none;padding:0;font-size:12px;overflow-wrap:anywhere}.history-log li{padding:9px 0;border-bottom:1px solid #e3e8dd}.history-log .turn{font-weight:600;color:#29483b;background:#e9eee5;padding:8px;border-radius:7px}.history-log small{display:block;font-size:10px;color:#7c8b7a}.history-policy summary{font-size:11px;cursor:pointer;color:#3c614c}.history-policy p{font-size:11px;color:#607466}.history-pages{display:flex;align-items:center;justify-content:space-between;gap:8px;font-size:11px}
     main{overflow:auto;padding:18px 18px 24px;flex:1;scrollbar-width:thin}.toolbar{display:flex;gap:9px;align-items:center;margin-bottom:17px}.toolbar select{flex:1;min-width:0}select,input{border:1px solid #cbd5cb;border-radius:8px;background:#fff;color:#314c40;padding:7px 10px}input[type=number]{width:65px}label{color:#607466;font-size:11px}.eyebrow{color:#74877b;font-size:10px;letter-spacing:1px;margin:0 0 9px;font-weight:600}
     .summary{display:grid;grid-template-columns:1fr 1fr;gap:10px}.stat{border:1px solid #dde4da;background:#fff;border-radius:12px;padding:12px 14px}.stat.primary{background:#203f37;color:#f1f7e4;border-color:#203f37}.stat p{font-size:11px;margin:0 0 4px;color:#738575}.stat.primary p{color:#d2dfc9}.number{font-size:27px;line-height:1.25;letter-spacing:-.8px;font-weight:650}.unit{font-size:11px;margin-left:5px;letter-spacing:0;font-weight:400}.stat small{font-size:10px;display:block;margin-top:6px;color:#81917e}.stat.primary small{color:#cbd8c4}
     .mix{display:flex;gap:3px;margin:16px 0 7px;height:7px;border-radius:5px;overflow:hidden}.mix span{min-width:0}.legend{display:flex;flex-wrap:wrap;gap:12px;font-size:10px;color:#71816f}.legend i{display:inline-block;width:6px;height:6px;border-radius:2px;margin-right:4px}.action-stat{padding:10px 12px}.action-stat .number{font-size:24px}.action-stat .copies{float:right;font-size:11px;font-weight:500}.money-chart{display:flex;gap:4px;align-items:flex-end;height:72px;margin-top:14px}.money-chart .bar{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:flex-end;height:100%;font-size:9px;color:#8b967e}.money-chart i{display:block;background:#b8caad;width:100%;max-width:25px;border-radius:3px 3px 0 0;min-height:2px}.money-chart .strong i{background:#66835a}
@@ -24,16 +25,19 @@
   const colors = { action: "#7eab9c", treasure: "#d8b864", victory: "#acc77c", curse: "#a795bb", other: "#aab6ae" };
   const typeColor = c => c.types.includes("ACTION") ? colors.action : c.types.includes("TREASURE") ? colors.treasure : c.types.includes("VICTORY") ? colors.victory : c.types.includes("CURSE") ? colors.curse : colors.other;
   class Panel {
-    constructor(host, { onChange, settings = {} } = {}) {
+    constructor(host, { onChange, onHistoryAction, settings = {} } = {}) {
       // Keep the identity of the code loaded by this page, even after disk updates.
       this.buildInfo = ns.buildInfo;
       this.root = host.attachShadow({ mode: "open" });
       this.settings = { tab: "deck", zone: "owned", draws: 5, minimized: false, basic: false, budget: "", ...settings };
       this.snapshot = { status: "waiting" }; this.onChange = onChange || (() => {});
+      this.onHistoryAction = onHistoryAction;
+      this.history = { state: null, status: { code: "loading", message: onHistoryAction ? "履歴を読み込んでいます…" : "このデモでは端末への履歴保存は利用できません。" } };
+      this.historyId = null; this.historyPage = 0; this.pendingDelete = null;
       this.pendingUpdate = false;
       this.pointerAction = false;
       this.root.addEventListener("pointerdown", event => {
-        if (!this.root.activeElement?.matches('input[type="number"]') || !event.target.closest("button[data-action], input[type=checkbox], label")) return;
+        if (!event.target.closest("button[data-action], input[type=checkbox], label")) return;
         // Keep pressed controls in the DOM until their click/change actions run.
         this.pointerAction = true;
         const finish = () => {
@@ -47,6 +51,20 @@
       this.root.addEventListener("click", event => {
         const button = event.target.closest("button[data-action]"); if (!button) return;
         const { action, value } = button.dataset;
+        if (action.startsWith("history-")) {
+          if (action === "history-open") { this.historyId = value; this.historyPage = 0; this.pendingDelete = null; }
+          if (action === "history-back") { this.historyId = null; this.pendingDelete = null; }
+          if (action === "history-page") this.historyPage += Number(value);
+          if (action === "history-delete") this.pendingDelete = { gameId: value };
+          if (action === "history-delete-all") this.pendingDelete = { all: true };
+          if (action === "history-cancel") this.pendingDelete = null;
+          if (action === "history-confirm" && this.pendingDelete) {
+            const deletion = this.pendingDelete; this.pendingDelete = null;
+            this.onHistoryAction?.({ type: "delete", ...deletion });
+          }
+          if (action === "history-retry") this.onHistoryAction?.({ type: "read" });
+          this.render(); return;
+        }
         if (action === "tab") this.settings.tab = value;
         if (action === "zone") this.settings.zone = value;
         if (action === "minimize") this.settings.minimized = !this.settings.minimized;
@@ -54,6 +72,7 @@
       });
       this.root.addEventListener("change", event => {
         const { key } = event.target.dataset; if (!key) return;
+        if (key === "historyEnabled") { this.onHistoryAction?.({ type: "enabled", enabled: event.target.checked }); return; }
         if (key === "draws") this.settings.draws = Math.min(20, Math.max(1, Math.floor(Number(event.target.value) || 5)));
         else if (key === "basic") this.settings.basic = event.target.checked;
         else if (key === "player") { this.settings.player = Number(event.target.value); this.settings.zone = "owned"; }
@@ -71,8 +90,8 @@
       });
       this.root.addEventListener("keydown", event => {
         if (event.target.getAttribute("role") !== "tab") return;
-        const tabs = ["deck", "kingdom", "guide"], current = tabs.indexOf(this.settings.tab);
-        const next = event.key === "ArrowRight" ? (current + 1) % 3 : event.key === "ArrowLeft" ? (current + 2) % 3 : event.key === "Home" ? 0 : event.key === "End" ? 2 : -1;
+        const tabs = ["deck", "kingdom", "history", "guide"], current = tabs.indexOf(event.target.dataset.value);
+        const next = event.key === "ArrowRight" ? (current + 1) % tabs.length : event.key === "ArrowLeft" ? (current + tabs.length - 1) % tabs.length : event.key === "Home" ? 0 : event.key === "End" ? tabs.length - 1 : -1;
         if (next < 0) return;
         event.preventDefault(); this.settings.tab = tabs[next]; this.render();
         this.root.querySelector(`#tab-${tabs[next]}`).focus();
@@ -87,6 +106,11 @@
       }
       this.render();
     }
+    setHistory(history) {
+      this.history = history;
+      if (this.pointerAction || this.root.activeElement?.matches('input[type="number"]')) { this.pendingUpdate = true; return; }
+      this.render();
+    }
     flushPendingUpdate() {
       if (this.pendingUpdate && !this.pointerAction && !this.root.activeElement?.matches('input[type="number"]')) this.render();
     }
@@ -96,6 +120,7 @@
       const focus = this.root.activeElement?.dataset?.key;
       const button = this.root.activeElement?.closest("button[data-action]")?.dataset;
       const expanded = [...this.root.querySelectorAll("details[open][data-card]")].map(d => d.dataset.card);
+      const historyPolicyOpen = this.root.querySelector(".history-policy")?.open;
       const { settings: s, snapshot: data } = this;
       if (s.minimized) { this.root.innerHTML = `<style>${css}</style><button class="pill" data-action="minimize" aria-label="Dominion Lensを開く">${symbol}Dominion Lens</button>`; return; }
       const players = data.status === "ready" ? ns.analysis.replay(data.players, data.logs) : [];
@@ -104,18 +129,21 @@
       const own = data.ownZones?.find(z => z.index === player?.index);
       const status = data.demo ? "デモ · サンプル対戦" : data.status === "ready" ? `友達・CPU戦 · 第${data.turn || 1}ターン` : data.status === "rated" ? "レート戦 · 表示停止" : "対戦の開始を待っています";
       let body;
-      if (s.tab === "guide") body = this.guide();
+      if (s.tab === "history") body = this.historyView();
+      else if (s.tab === "guide") body = this.guide();
       else if (!player) body = `<div class="welcome"><p class="eyebrow">YOUR DECK, IN FOCUS</p><h1>デッキの今を、<br>ひと目で。</h1><p>${escape(data.message || "dominion.gamesでログインし、友達またはCPUとの対戦を開始してください。")}</p><div class="feature"><strong>所有カードとドロー確率</strong>獲得・廃棄のログからデッキを追跡します。</div><div class="feature"><strong>平均金量と王国評価</strong>財宝の期待値と、購入候補の理由を表示します。</div></div>`;
       else {
         const select = `<div class="toolbar"><label for="player">プレイヤー</label><select id="player" data-key="player">${players.map(p => `<option value="${p.index}" ${p.index === player.index ? "selected" : ""}>${escape(p.name)}${p.isMe ? "（自分）" : ""}</option>`).join("")}</select></div>`;
         const warnings = player.issues.map(i => `<div class="notice">${escape(i)}</div>`).join("");
         body = select + warnings + (s.tab === "kingdom" ? this.kingdom(player) : this.deck(player, own));
       }
-      this.root.innerHTML = `<style>${css}</style><section class="panel" aria-label="Dominion Lens デッキ分析"><header><div class="logo">${symbol}</div><div class="brand"><b>Dominion Lens</b><small>デッキを知る。次の一手を考える。</small></div><button class="icon" data-action="minimize" aria-label="パネルを折りたたむ">−</button></header><div class="status ${data.demo ? "demo" : ""}"><span class="dot"></span>${escape(status)}</div><nav class="tabs" role="tablist" aria-label="分析メニュー">${[["deck", "デッキ"], ["kingdom", "王国"], ["guide", "使い方"]].map(([key, label]) => `<button id="tab-${key}" role="tab" aria-controls="lens-main" aria-selected="${s.tab === key}" data-action="tab" data-value="${key}">${label}</button>`).join("")}</nav><main id="lens-main" role="tabpanel" aria-labelledby="tab-${s.tab}">${body}</main><div class="footer"><span>ローカルで分析 · データ送信なし</span><span data-build="${escape(this.buildInfo.build)}" aria-label="適用版">v${escape(this.buildInfo.version)} · ${escape(this.buildInfo.build)}</span></div></section>`;
+      this.root.innerHTML = `<style>${css}</style><section class="panel" aria-label="Dominion Lens デッキ分析"><header><div class="logo">${symbol}</div><div class="brand"><b>Dominion Lens</b><small>デッキを知る。次の一手を考える。</small></div><button class="icon" data-action="minimize" aria-label="パネルを折りたたむ">−</button></header><div class="status ${data.demo ? "demo" : ""}"><span class="dot"></span>${escape(status)}</div><nav class="tabs" role="tablist" aria-label="分析メニュー">${[["deck", "デッキ"], ["kingdom", "王国"], ["history", "履歴"], ["guide", "使い方"]].map(([key, label]) => `<button id="tab-${key}" role="tab" aria-controls="lens-main" aria-selected="${s.tab === key}" data-action="tab" data-value="${key}">${label}</button>`).join("")}</nav>${this.onHistoryAction ? `<div class="history-status ${this.history.status?.code === "error" ? "error" : ""}" role="status">${escape(this.history.status?.message)}</div>` : ""}<main id="lens-main" role="tabpanel" aria-labelledby="tab-${s.tab}">${body}</main><div class="footer"><span>ローカルで分析 · データ送信なし</span><span data-build="${escape(this.buildInfo.build)}" aria-label="適用版">v${escape(this.buildInfo.version)} · ${escape(this.buildInfo.build)}</span></div></section>`;
       this.root.querySelector("main").scrollTop = scroll;
       for (const details of this.root.querySelectorAll("details[data-card]")) if (expanded.includes(details.dataset.card)) details.open = true;
+      const historyPolicy = this.root.querySelector(".history-policy");
+      if (historyPolicy && historyPolicyOpen) historyPolicy.open = true;
       if (focus) this.root.querySelector(`[data-key="${focus}"]`)?.focus({ preventScroll: true });
-      else if (button) this.root.querySelector(`button[data-action="${button.action}"]${button.value ? `[data-value="${button.value}"]` : ""}`)?.focus({ preventScroll: true });
+      else if (button) [...this.root.querySelectorAll("button[data-action]")].find(node => node.dataset.action === button.action && (!button.value || node.dataset.value === button.value))?.focus({ preventScroll: true });
     }
     deck(player, own) {
       const { snapshot: data, settings: s } = this;
@@ -175,8 +203,42 @@
       return filters + `<section aria-label="購入候補"><h2 class="subheading">購入候補</h2>${available.length ? available.map(row).join("") : `<div class="empty">条件に合う購入候補がありません。</div>`}</section>`
         + (empty.length ? `<section aria-label="空のサプライ"><h2 class="subheading">空のサプライ</h2><p class="note">残り0枚のため購入できません。</p>${empty.map(row).join("")}</section>` : "");
     }
+    historyView() {
+      const { state, status } = this.history;
+      const records = state?.records || [], busy = status?.code === "pending";
+      const disabled = !state || busy ? "disabled" : "";
+      const button = (action, label, value = "", disable = false) => `<button class="history-button" data-action="history-${action}" data-value="${escape(value)}" ${disable ? "disabled" : ""}>${label}</button>`;
+      const policy = `<details class="history-policy"><summary>保存内容・名前の扱い・保持方針</summary><p>保存は初期状態では無効です。有効にすると、友達・CPU戦の対局ID、取得日時、プレイヤー名、ターン番号、購入・獲得・廃棄・公開の受け渡しと開始カードを端末内に保存します。名前はサイトから取得した表記のまま残ります。</p><p>相手の非公開の手札、自分の手札・山札・捨て札の内訳、認証情報、チャットは保存しません。外部への送信・公開は行いません。レート戦は記録しません。</p><p>最大30件・合計2 MiBです。上限では最終取得日時が古い履歴から自動削除します。1対局で上限を超える更新は未保存になります。削除済み対局のIDもこの容量内に保持し、再接続や再起動による復活を防ぎます。保存を無効にしても既存履歴は残ります。</p><p>取得できた公開ログだけを表示します。カードの使用・ドローなどは対象外です。日時は最初と最後に取得した日時で、実際の対局開始・終了時刻ではありません。巻き戻し時は取得済みログ全体を置き換えます。</p></details>`;
+      const controls = `<p class="eyebrow">LOCAL MATCH HISTORY</p><div class="history-controls"><label><input type="checkbox" data-key="historyEnabled" ${state?.enabled ? "checked" : ""} ${disabled}>対戦ログを端末に保存</label>${button("delete-all", "全履歴を削除", "", !records.length || !state || busy)}</div><p class="note">最大30件・2 MiB。上限では古い履歴から削除します。名前を含む取得済みの公開ログを端末に保存します。</p>${policy}`;
+      const confirmation = this.pendingDelete ? `<div class="notice" role="alert"><p>${this.pendingDelete.all ? "全履歴" : "この対局の履歴"}を削除します。削除した対局は再接続後も再記録しません。</p><div class="history-actions">${button("confirm", "削除する", "", busy)}${button("cancel", "キャンセル")}</div></div>` : "";
+      const retry = status?.code === "error" ? `<p class="notice">${escape(status.message)}</p>${button("retry", "再試行")}` : "";
+      const date = value => new Date(value).toLocaleString("ja-JP");
+      const heading = r => `<h2>対局 ${escape(r.gameId)}</h2><p>初回取得 ${escape(date(r.createdAt))}<br>最終取得 ${escape(date(r.updatedAt))} · 第${r.turn}ターン</p><p>${r.players.map(p => escape(p.name)).join(" / ")}</p><p>${r.partial ? "途中から記録（開始時のログが不足）" : "開始時のログを含む"} · ${r.logs.length}行</p>`;
+      const selected = records.find(r => r.gameId === this.historyId);
+      if (!selected) {
+        this.historyId = null;
+        return controls + confirmation + retry + (records.map(r => `<article class="history-item">${heading(r)}<div class="history-actions">${button("open", "ログを開く", r.gameId)}${button("delete", "削除", r.gameId, busy)}</div></article>`).join("") || `<p class="empty">${state ? "保存された対局はありません。" : escape(status?.message)}</p>`);
+      }
+      const pageSize = 100, pages = Math.max(1, Math.ceil(selected.logs.length / pageSize));
+      this.historyPage = Math.min(pages - 1, Math.max(0, this.historyPage));
+      const start = this.historyPage * pageSize;
+      const names = new Map(selected.players.map(p => [p.index, p.name]));
+      const labels = { STARTS_WITH: "開始カード", BUY: "購入", BUY_AND_GAIN: "購入・獲得", GAIN: "獲得", GAIN_WITH: "獲得", TRASH: "廃棄", TRASH_WITH: "廃棄", EXCHANGE_RETURN: "交換で返却", EXCHANGE_RECEIVE: "交換で獲得", RETURN_TO: "返却", PASS: "受け渡し", GAIN_ON_DRAWPILE: "山札に獲得", GAIN_FROM_TRASH: "廃棄から獲得", GAIN_ANOTHER_EXPERIMENT: "実験を追加獲得", RECEIVES: "受け取る", RETURN: "返す", TAKE: "取得" };
+      let previousTurn;
+      const rows = selected.logs.slice(start, start + pageSize).map(e => {
+        let header = "";
+        if (e.type === "NEW_TURN" || previousTurn !== e.turn) {
+          previousTurn = e.turn;
+          header = `<li class="turn">${e.turn === null ? "開始時・ターン番号不明" : `第${e.turn}ターン`}${e.type === "NEW_TURN" ? ` · ${escape(names.get(e.player) || "不明なプレイヤー")}` : ""}</li>`;
+        }
+        if (e.type === "NEW_TURN") return header;
+        const cards = e.cards.map(c => `${escape(selected.labels[c.name] || c.name)} × ${c.count}`).join("、");
+        return header + `<li>${escape(names.get(e.player) || "不明なプレイヤー")} · ${labels[e.type] || escape(e.type)}<br>${cards || "カード情報なし"}${e.type === "PASS" ? ` → ${escape(names.get(e.toPlayer) || "不明なプレイヤー")}` : ""}<small>ログ #${e.index}</small></li>`;
+      }).join("");
+      return controls + confirmation + retry + `<article class="history-item">${heading(selected)}<div class="history-actions">${button("back", "一覧に戻る")}${button("delete", "この履歴を削除", selected.gameId, busy)}</div></article><p class="note">最後に保存できた取得ログです。対局終了後は取得できなかった操作を補完しません。</p><div class="history-pages">${button("page", "前へ", "-1", this.historyPage === 0)}<span>${this.historyPage + 1} / ${pages}ページ</span>${button("page", "次へ", "1", this.historyPage === pages - 1)}</div><ol class="history-log">${rows || `<li>取得できた公開ログはありません。</li>`}</ol>`;
+    }
     guide() {
-      return `<div class="guide"><p class="eyebrow">HOW IT WORKS</p><h2 class="subheading">対戦中の使い方</h2><p>プレイヤーを切り替えると、自分や相手の所有カードを確認できます。「所有全体」は手札・山札・捨て札・場のカードを含みます。</p><p>「山札」「捨て札」は自分のカードだけを追跡します。途中参加や巻き戻しで情報が不足したときは、捨て札が空になるまで未確定と表示します。</p><h2 class="subheading">アクションエンドとコンボ</h2><p>アクションエンドは、カード自体に＋アクションがないカード（鍛冶屋・礼拝堂など）。コンボは、＋1アクション以上のカード（村・研究所・市場など）です。ここでのコンボは相性のよいカードすべてを指しません。</p><p>玉座の間や家臣は他のカードによって連続使用できますが、自身に＋アクションがないためエンドに分類します。実際に使える回数や村で使い切れるかを計算する指標ではありません。</p><p>大きい割合は所有全体に対する割合です。「アクション内」は全アクションを分母に計算します。山札・捨て札へ切り替えても、この集計は所有全体を対象にします。</p><p>分類は基本セット第2版に対応しています。未対応のアクションは未分類として分母に含めます。アクションが0枚ならアクション内は「—」、所有カードが未確定なら割合も未確定です。</p><h2 class="subheading">平均金量と確率</h2><p>期待金量と5金・8金に届く確率は、全所有カードから無作為に5枚選んだ財宝だけで計算します。アクションの効果や手札を使う順番は含みません。</p><p>ドロー確率は指定した枚数にそのカードが1枚以上含まれる確率です。山札を選んだ場合も、上に戻したカードなど既知の順番は考慮しません。山札と捨て札の内訳が確定していれば、山札を引き切った後に現在の捨て札をシャッフルして残りの枚数を引くモデルへ切り替えます。手札・場・脇のカードや途中のアクション効果は含めず、山札と捨て札の合計枚数までで計算します。</p><h2 class="subheading">王国の評価</h2><p>基本セット第2版26枚と主要な財宝・勝利点に対応しています。廃棄の需要、アクション回数、呪いの残数などで優先度を調整します。拡張セットのカードは内訳に表示できても、評価は「未評価」です。</p><h2 class="subheading">接続とデータ</h2><p>友達・CPU戦向けです。レート戦では表示を停止します。分析はブラウザ内で実行し、対戦ログやプレイヤー名を保存・外部送信しません。表示設定のみChromeに保存します。</p><p>パネルが接続できない場合は、拡張を読み込み直してからdominion.gamesのページを再読み込みしてください。</p></div>`;
+      return `<div class="guide"><p class="eyebrow">HOW IT WORKS</p><h2 class="subheading">対戦中の使い方</h2><p>プレイヤーを切り替えると、自分や相手の所有カードを確認できます。「所有全体」は手札・山札・捨て札・場のカードを含みます。</p><p>「山札」「捨て札」は自分のカードだけを追跡します。途中参加や巻き戻しで情報が不足したときは、捨て札が空になるまで未確定と表示します。</p><h2 class="subheading">アクションエンドとコンボ</h2><p>アクションエンドは、カード自体に＋アクションがないカード（鍛冶屋・礼拝堂など）。コンボは、＋1アクション以上のカード（村・研究所・市場など）です。ここでのコンボは相性のよいカードすべてを指しません。</p><p>玉座の間や家臣は他のカードによって連続使用できますが、自身に＋アクションがないためエンドに分類します。実際に使える回数や村で使い切れるかを計算する指標ではありません。</p><p>大きい割合は所有全体に対する割合です。「アクション内」は全アクションを分母に計算します。山札・捨て札へ切り替えても、この集計は所有全体を対象にします。</p><p>分類は基本セット第2版に対応しています。未対応のアクションは未分類として分母に含めます。アクションが0枚ならアクション内は「—」、所有カードが未確定なら割合も未確定です。</p><h2 class="subheading">平均金量と確率</h2><p>期待金量と5金・8金に届く確率は、全所有カードから無作為に5枚選んだ財宝だけで計算します。アクションの効果や手札を使う順番は含みません。</p><p>ドロー確率は指定した枚数にそのカードが1枚以上含まれる確率です。山札を選んだ場合も、上に戻したカードなど既知の順番は考慮しません。山札と捨て札の内訳が確定していれば、山札を引き切った後に現在の捨て札をシャッフルして残りの枚数を引くモデルへ切り替えます。手札・場・脇のカードや途中のアクション効果は含めず、山札と捨て札の合計枚数までで計算します。</p><h2 class="subheading">王国の評価</h2><p>基本セット第2版26枚と主要な財宝・勝利点に対応しています。廃棄の需要、アクション回数、呪いの残数などで優先度を調整します。拡張セットのカードは内訳に表示できても、評価は「未評価」です。</p><h2 class="subheading">接続とデータ</h2><p>友達・CPU戦向けです。レート戦では表示を停止します。分析はブラウザ内で実行します。表示設定をChromeに保存し、履歴の保存を有効にすると対局ID・取得日時・名前・取得できた公開ログも端末に保存します。外部送信は行いません。</p><p>「履歴」で保存を切り替え、保存したログを閲覧・削除できます。最大30件・合計2 MiBで、上限では古い履歴から自動削除します。名前はサイトから取得した表記のまま残ります。保存内容の詳細と保持方針は「履歴」で確認してください。</p><p>パネルが接続できない場合は、拡張を読み込み直してからdominion.gamesのページを再読み込みしてください。</p></div>`;
     }
   }
   ns.Panel = Panel;

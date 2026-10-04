@@ -30,11 +30,15 @@
         "lib/catalog.js",
         "lib/analysis.js",
         "lib/protocol.js",
+        "lib/history.js",
         "lib/view.js",
         "content.js"
       ],
       "run_at": "document_idle"
     }
   ],
-  "version_name": "0.1.2 (e344ccbfbeea)"
+  "version_name": "0.1.2 (5fea6dd1b8e9)",
+  "background": {
+    "service_worker": "background.js"
+  }
 }
