@@ -1,0 +1,64 @@
+name: PR validation
+
+on:
+  pull_request:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+jobs:
+  validate:
+    name: Tests, manifest and package
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    defaults:
+      run:
+        shell: bash
+    env:
+      CHROME_BIN: /usr/bin/google-chrome
+    steps:
+      - name: Check out the PR merge commit
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Set up Node.js 22
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: '22'
+          package-manager-cache: false
+
+      - name: Check ZIP tools and Chrome
+        run: |
+          command -v zip
+          command -v unzip
+          "$CHROME_BIN" --version
+
+      - name: Run regression tests
+        run: |
+          npm test | tee "$RUNNER_TEMP/tests.tap"
+          if ! grep -qx '# skipped 0' "$RUNNER_TEMP/tests.tap"; then
+            echo '::error::Regression tests must complete without skips in CI.'
+            exit 1
+          fi
+
+      - name: Check manifest, references and JavaScript syntax
+        run: npm run check
+
+      - name: Generate the versioned extension ZIP
+        run: npm run package
+
+      - name: Verify ZIP integrity
+        run: unzip -t dist/dominion-lens-*.zip
+
+      - name: Upload the validated extension ZIP
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          path: dist/dominion-lens-*.zip
+          archive: false
+          if-no-files-found: error
+          retention-days: 7
