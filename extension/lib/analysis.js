@@ -134,10 +134,11 @@
     const names = new Set(supply.filter(p => p.remaining > 0).map(p => p.name));
     return supply.map(pile => {
       const c = ns.card(pile.name, metadata[pile.name]);
-      if (c.score === undefined) return { ...pile, card: c, score: null, reasons: ["このカードの評価データはまだありません。"] };
+      const recommendation = { ...pile, card: c, availability: pile.remaining === 0 ? "empty" : "available", evaluation: c.score === undefined ? "unsupported" : "supported" };
+      if (recommendation.availability === "empty") return { ...recommendation, score: null, reasons: ["このサプライは空です。"] };
+      if (recommendation.evaluation === "unsupported") return { ...recommendation, score: null, reasons: ["このカードの評価データはまだありません。"] };
       let score = c.score, reasons = [c.tip];
       const adjust = (delta, reason) => { score += delta; reasons.push(reason); };
-      if (pile.remaining === 0) return { ...pile, card: c, score: null, reasons: ["このサプライは空です。"] };
       if (c.tags.includes("trash")) {
         if (m.total && m.junk / m.total >= .4 && !late) adjust(1, "銅貨・屋敷・呪いが多く、圧縮で手札を改善できます。");
         if (m.total && m.junk / m.total < .2) adjust(-2, "廃棄したいカードが少なく、追加の圧縮は優先度が下がります。");
@@ -165,7 +166,7 @@
         if (late) adjust(c.name === "Duchy" ? 6 : 2, "主要な勝利点の残りが4枚以下です。点数確保を優先する時期です。");
         else if (c.name === "Duchy") adjust(-1, "主要な勝利点がまだ多く、今はデッキの出力を育てやすい時期です。");
       } else if (late) adjust(-1, "ゲーム終了が近く、購入後に使える回数が少ない可能性があります。");
-      return { ...pile, card: c, score: Math.max(0, Math.min(10, score)), reasons };
+      return { ...recommendation, score: Math.max(0, Math.min(10, score)), reasons };
     }).sort((a, b) => (b.score ?? -1) - (a.score ?? -1) || (a.card.cost || 0) - (b.card.cost || 0));
   }
   ns.analysis = { size, replay, drawProbability, moneyDistribution, actionComposition, metrics, recommendations, deriveDraw, validCount };
