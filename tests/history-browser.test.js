@@ -54,6 +54,19 @@ test('real extension history UI, Chrome storage, page reload and browser restart
 
   await open();
   t.diagnostic(`History browser: ${(await browser.command('Browser.getVersion')).product}`);
+  await t.test('history policy keeps its open and closed state across incoming snapshots', async () => {
+    await browser.click('root.querySelector(".history-policy summary")');
+    assert.equal(await browser.evaluate('root.querySelector(".history-policy").open'), true);
+    await post(historyFixture());
+    await wait(async () => (await status()).includes('無効'), 'default-off update');
+    assert.equal(await browser.evaluate('root.querySelector(".history-policy").open'), true);
+    await browser.click('root.querySelector(".history-policy summary")');
+    const closedUpdate = historyFixture('sample-policy-match'); closedUpdate.turn = 3;
+    await post(closedUpdate);
+    await wait(() => browser.evaluate('root.querySelector(".status").textContent.includes("第3ターン")'), 'closed-policy update');
+    assert.equal(await browser.evaluate('root.querySelector(".history-policy").open'), false);
+    assert.equal((await readStorage()).lensHistory, undefined);
+  });
   await t.test('default off, native opt-in, public logs, HTML escape and final waiting state', async () => {
     assert.equal(await browser.evaluate('root.querySelector("[data-key=historyEnabled]").checked'), false);
     const snapshot = historyFixture(); snapshot.players[0].name = '<img src=x onerror="window.unexpected=true">';

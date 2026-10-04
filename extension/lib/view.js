@@ -118,6 +118,7 @@
       const focus = this.root.activeElement?.dataset?.key;
       const button = this.root.activeElement?.closest("button[data-action]")?.dataset;
       const expanded = [...this.root.querySelectorAll("details[open][data-card]")].map(d => d.dataset.card);
+      const historyPolicyOpen = this.root.querySelector(".history-policy")?.open;
       const { settings: s, snapshot: data } = this;
       if (s.minimized) { this.root.innerHTML = `<style>${css}</style><button class="pill" data-action="minimize" aria-label="Dominion Lensを開く">${symbol}Dominion Lens</button>`; return; }
       const players = data.status === "ready" ? ns.analysis.replay(data.players, data.logs) : [];
@@ -137,6 +138,8 @@
       this.root.innerHTML = `<style>${css}</style><section class="panel" aria-label="Dominion Lens デッキ分析"><header><div class="logo">${symbol}</div><div class="brand"><b>Dominion Lens</b><small>デッキを知る。次の一手を考える。</small></div><button class="icon" data-action="minimize" aria-label="パネルを折りたたむ">−</button></header><div class="status ${data.demo ? "demo" : ""}"><span class="dot"></span>${escape(status)}</div><nav class="tabs" role="tablist" aria-label="分析メニュー">${[["deck", "デッキ"], ["kingdom", "王国"], ["history", "履歴"], ["guide", "使い方"]].map(([key, label]) => `<button id="tab-${key}" role="tab" aria-controls="lens-main" aria-selected="${s.tab === key}" data-action="tab" data-value="${key}">${label}</button>`).join("")}</nav>${this.onHistoryAction ? `<div class="history-status ${this.history.status?.code === "error" ? "error" : ""}" role="status">${escape(this.history.status?.message)}</div>` : ""}<main id="lens-main" role="tabpanel" aria-labelledby="tab-${s.tab}">${body}</main><div class="footer"><span>ローカルで分析 · データ送信なし</span><span>v0.1.1</span></div></section>`;
       this.root.querySelector("main").scrollTop = scroll;
       for (const details of this.root.querySelectorAll("details[data-card]")) if (expanded.includes(details.dataset.card)) details.open = true;
+      const historyPolicy = this.root.querySelector(".history-policy");
+      if (historyPolicy && historyPolicyOpen) historyPolicy.open = true;
       if (focus) this.root.querySelector(`[data-key="${focus}"]`)?.focus({ preventScroll: true });
       else if (button) [...this.root.querySelectorAll("button[data-action]")].find(node => node.dataset.action === button.action && (!button.value || node.dataset.value === button.value))?.focus({ preventScroll: true });
     }
