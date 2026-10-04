@@ -131,16 +131,27 @@
       const max = Math.max(...money.distribution.map(d => d.probability), .01);
       const chart = `<div class="section-heading"><h2>5枚の財宝金量</h2><span>全体シャッフル想定</span></div><div class="money-chart" aria-label="5枚の財宝金量の分布">${money.distribution.map(d => `<div class="bar ${d.money >= 5 ? "strong" : ""}" title="${d.money}金: ${percent(d.probability)}"><i style="height:${Math.max(2, d.probability / max * 50)}px"></i><span>${d.money}</span></div>`).join("")}</div><div class="thresholds"><span>5金以上<b>${percent(money.p5)}</b></span><span>8金以上<b>${percent(money.p8)}</b></span></div>`;
       const modelNote = `<p class="note">${money.unknown ? "未対応の財宝は0金で計算した下限です。" : "アクションの金量・追加ドロー・コイントークンは含みません。"} 全所有カードから無作為に5枚選ぶモデルです。</p>`;
-      let counts = player.counts, available = exact, explanation = "全所有カードをシャッフルし、無作為に引く想定";
-      if (s.zone === "draw") { counts = ns.analysis.deriveDraw(player, own); available = !!counts; explanation = "現在の山札を無作為に引く想定。既知の順番は考慮しません。山札より多い指定は残り枚数までで計算します"; }
-      if (s.zone === "discard") { counts = own?.discard?.counts; available = !!own?.discard?.complete; explanation = "追跡できた捨て札の内訳"; }
-      const zones = `<div class="section-heading"><h2>カード内訳</h2><span>${available ? `${ns.analysis.size(counts)}枚` : "未確定"}</span></div><div class="segmented">${[["owned", "所有全体"], ["draw", "山札"], ["discard", "捨て札"]].map(([key, label]) => `<button data-action="zone" data-value="${key}" aria-pressed="${s.zone === key}">${label}</button>`).join("")}</div>`;
+      let counts = player.counts, available = exact, drawModel = null, explanation = "全所有カードをシャッフルし、無作為に引く想定";
+      if (s.zone === "draw") {
+        drawModel = ns.analysis.deriveDrawModel(player, own, s.draws); counts = drawModel?.counts; available = !!drawModel;
+        explanation = drawModel ? drawModel.reshuffle
+          ? `山札→捨て札シャッフル：山札${drawModel.fromDraw}枚を引き切り、現在の捨て札${drawModel.discardSize}枚から${drawModel.fromDiscard}枚（計${drawModel.fromDraw + drawModel.fromDiscard}枚）を引く想定。カード枚数は山札と捨て札の合計です。`
+          : `山札のみ：現在の山札${drawModel.drawSize}枚から${drawModel.fromDraw}枚を無作為に引く想定。`
+          : "山札のみ・捨て札シャッフルのモデルには、山札と捨て札の確定した内訳が必要です。";
+        explanation += " 既知の山札順序、途中のアクション効果、手札・場・脇からの移動は含みません。";
+        if (drawModel && s.draws > drawModel.drawSize + drawModel.discardSize) explanation += " 指定枚数が山札と捨て札の合計を超えるため、引ける枚数までで計算します。";
+      }
+      if (s.zone === "discard") { counts = own?.discard?.counts; available = player.isMe && !!own?.discard?.complete; explanation = "追跡できた捨て札の内訳"; }
+      const zoneSize = drawModel?.reshuffle ? `山札${drawModel.drawSize}枚＋捨て札${drawModel.discardSize}枚` : `${ns.analysis.size(counts)}枚`;
+      const zones = `<div class="section-heading"><h2>カード内訳</h2><span>${available ? zoneSize : "未確定"}</span></div><div class="segmented">${[["owned", "所有全体"], ["draw", "山札"], ["discard", "捨て札"]].map(([key, label]) => `<button data-action="zone" data-value="${key}" aria-pressed="${s.zone === key}">${label}</button>`).join("")}</div>`;
       const control = s.zone !== "discard" ? `<div class="draw-controls"><label for="draws">次の<input id="draws" type="number" min="1" max="20" data-key="draws" value="${s.draws}">枚に1枚以上含まれる確率</label></div>` : "";
       let rows;
-      if (!available) rows = `<div class="notice">${s.zone === "owned" ? "開始時のログを含む対戦で確認してください。" : !player.isMe ? "相手の山札・捨て札の内訳は表示しません。所有全体の集計を確認できます。" : "内訳を確定できません。途中参加・巻き戻し後は、捨て札が空になるまで追跡を待ちます。"}</div>`;
+      if (!available) rows = `<div class="notice">${s.zone === "owned" ? "開始時のログを含む対戦で確認してください。" : !player.isMe ? "相手の山札・捨て札の内訳は表示しません。所有全体の集計を確認できます。" : `内訳を確定できません。途中参加・巻き戻し後は、捨て札が空になるまで追跡を待ちます。${exact && s.zone === "draw" ? " 「所有全体」では、全所有カードをシャッフルするモデルの確率を確認できます。" : ""}`}</div>`;
       else rows = Object.entries(counts || {}).sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0])).map(([name, count]) => {
         const c = ns.card(name, data.metadata[name]);
-        const probability = ns.analysis.drawProbability(ns.analysis.size(counts), count, s.draws);
+        const probability = drawModel
+          ? ns.analysis.drawProbabilityAfterShuffle(drawModel.drawSize, drawModel.draw[name] || 0, drawModel.discardSize, drawModel.discard[name] || 0, s.draws)
+          : ns.analysis.drawProbability(ns.analysis.size(counts), count, s.draws);
         return `<div class="card-row"><span class="stripe" style="background:${typeColor(c)}"></span><div class="card-name">${escape(c.ja)}<small>${escape(name)}</small></div><span class="copies">${count}</span><div class="chance">${s.zone === "discard" ? "枚" : `${percent(probability)}<div class="track"><i style="width:${probability * 100}%"></i></div>`}</div></div>`;
       }).join("") || `<div class="empty">この領域にカードはありません。</div>`;
       return stats + mix + actionMix + (exact ? chart + modelNote : "") + zones + control + `<p class="note">${explanation}</p>` + rows;
@@ -163,7 +174,7 @@
         + (empty.length ? `<section aria-label="空のサプライ"><h2 class="subheading">空のサプライ</h2><p class="note">残り0枚のため購入できません。</p>${empty.map(row).join("")}</section>` : "");
     }
     guide() {
-      return `<div class="guide"><p class="eyebrow">HOW IT WORKS</p><h2 class="subheading">対戦中の使い方</h2><p>プレイヤーを切り替えると、自分や相手の所有カードを確認できます。「所有全体」は手札・山札・捨て札・場のカードを含みます。</p><p>「山札」「捨て札」は自分のカードだけを追跡します。途中参加や巻き戻しで情報が不足したときは、捨て札が空になるまで未確定と表示します。</p><h2 class="subheading">アクションエンドとコンボ</h2><p>アクションエンドは、カード自体に＋アクションがないカード（鍛冶屋・礼拝堂など）。コンボは、＋1アクション以上のカード（村・研究所・市場など）です。ここでのコンボは相性のよいカードすべてを指しません。</p><p>玉座の間や家臣は他のカードによって連続使用できますが、自身に＋アクションがないためエンドに分類します。実際に使える回数や村で使い切れるかを計算する指標ではありません。</p><p>大きい割合は所有全体に対する割合です。「アクション内」は全アクションを分母に計算します。山札・捨て札へ切り替えても、この集計は所有全体を対象にします。</p><p>分類は基本セット第2版に対応しています。未対応のアクションは未分類として分母に含めます。アクションが0枚ならアクション内は「—」、所有カードが未確定なら割合も未確定です。</p><h2 class="subheading">平均金量と確率</h2><p>期待金量と5金・8金に届く確率は、全所有カードから無作為に5枚選んだ財宝だけで計算します。アクションの効果や手札を使う順番は含みません。</p><p>ドロー確率は指定した枚数にそのカードが1枚以上含まれる確率です。山札を選んだ場合も、上に戻したカードなど既知の順番は考慮しません。山札を超えるドローで捨て札を混ぜる計算は行いません。</p><h2 class="subheading">王国の評価</h2><p>基本セット第2版26枚と主要な財宝・勝利点に対応しています。廃棄の需要、アクション回数、呪いの残数などで優先度を調整します。拡張セットのカードは内訳に表示できても、評価は「未評価」です。</p><h2 class="subheading">接続とデータ</h2><p>友達・CPU戦向けです。レート戦では表示を停止します。分析はブラウザ内で実行し、対戦ログやプレイヤー名を保存・外部送信しません。表示設定のみChromeに保存します。</p><p>パネルが接続できない場合は、拡張を読み込み直してからdominion.gamesのページを再読み込みしてください。</p></div>`;
+      return `<div class="guide"><p class="eyebrow">HOW IT WORKS</p><h2 class="subheading">対戦中の使い方</h2><p>プレイヤーを切り替えると、自分や相手の所有カードを確認できます。「所有全体」は手札・山札・捨て札・場のカードを含みます。</p><p>「山札」「捨て札」は自分のカードだけを追跡します。途中参加や巻き戻しで情報が不足したときは、捨て札が空になるまで未確定と表示します。</p><h2 class="subheading">アクションエンドとコンボ</h2><p>アクションエンドは、カード自体に＋アクションがないカード（鍛冶屋・礼拝堂など）。コンボは、＋1アクション以上のカード（村・研究所・市場など）です。ここでのコンボは相性のよいカードすべてを指しません。</p><p>玉座の間や家臣は他のカードによって連続使用できますが、自身に＋アクションがないためエンドに分類します。実際に使える回数や村で使い切れるかを計算する指標ではありません。</p><p>大きい割合は所有全体に対する割合です。「アクション内」は全アクションを分母に計算します。山札・捨て札へ切り替えても、この集計は所有全体を対象にします。</p><p>分類は基本セット第2版に対応しています。未対応のアクションは未分類として分母に含めます。アクションが0枚ならアクション内は「—」、所有カードが未確定なら割合も未確定です。</p><h2 class="subheading">平均金量と確率</h2><p>期待金量と5金・8金に届く確率は、全所有カードから無作為に5枚選んだ財宝だけで計算します。アクションの効果や手札を使う順番は含みません。</p><p>ドロー確率は指定した枚数にそのカードが1枚以上含まれる確率です。山札を選んだ場合も、上に戻したカードなど既知の順番は考慮しません。山札と捨て札の内訳が確定していれば、山札を引き切った後に現在の捨て札をシャッフルして残りの枚数を引くモデルへ切り替えます。手札・場・脇のカードや途中のアクション効果は含めず、山札と捨て札の合計枚数までで計算します。</p><h2 class="subheading">王国の評価</h2><p>基本セット第2版26枚と主要な財宝・勝利点に対応しています。廃棄の需要、アクション回数、呪いの残数などで優先度を調整します。拡張セットのカードは内訳に表示できても、評価は「未評価」です。</p><h2 class="subheading">接続とデータ</h2><p>友達・CPU戦向けです。レート戦では表示を停止します。分析はブラウザ内で実行し、対戦ログやプレイヤー名を保存・外部送信しません。表示設定のみChromeに保存します。</p><p>パネルが接続できない場合は、拡張を読み込み直してからdominion.gamesのページを再読み込みしてください。</p></div>`;
     }
   }
   ns.Panel = Panel;

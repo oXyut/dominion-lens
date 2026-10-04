@@ -52,6 +52,15 @@
     for (let i = 0; i < n; i++) miss *= (total - copies - i) / (total - i);
     return Math.max(0, Math.min(1, 1 - miss));
   }
+  // Exhaust the current draw pile before sampling the current discard pile.
+  // Cards already in hand, play or aside never enter this second sample.
+  function drawProbabilityAfterShuffle(drawTotal, drawCopies, discardTotal, discardCopies, draws) {
+    if (![drawTotal, drawCopies, discardTotal, discardCopies, draws].every(validCount)
+      || drawCopies > drawTotal || discardCopies > discardTotal) return null;
+    if (draws <= drawTotal) return drawProbability(drawTotal, drawCopies, draws);
+    if (drawCopies) return 1;
+    return drawProbability(discardTotal, discardCopies, draws - drawTotal);
+  }
   function choose(n, k) {
     if (k < 0 || k > n) return 0;
     k = Math.min(k, n - k);
@@ -126,6 +135,16 @@
     }
     return size(counts) === snapshot.zones.drawSize ? counts : null;
   }
+  function deriveDrawModel(player, snapshot, draws) {
+    if (!validCount(draws)) return null;
+    const draw = deriveDraw(player, snapshot);
+    if (!draw) return null;
+    const discard = snapshot.discard.counts, drawSize = size(draw), discardSize = size(discard);
+    const reshuffle = draws > drawSize, counts = { ...draw };
+    if (reshuffle) for (const [name, count] of Object.entries(discard)) counts[name] = (counts[name] || 0) + count;
+    return { draw, discard, counts, drawSize, discardSize, reshuffle,
+      fromDraw: Math.min(draws, drawSize), fromDiscard: Math.min(Math.max(0, draws - drawSize), discardSize) };
+  }
   function recommendations(supply, counts, metadata = {}, turn = 0) {
     const m = metrics(counts, metadata), count = name => counts[name] || 0;
     const remaining = name => supply.find(p => p.name === name)?.remaining;
@@ -169,5 +188,5 @@
       return { ...recommendation, score: Math.max(0, Math.min(10, score)), reasons };
     }).sort((a, b) => (b.score ?? -1) - (a.score ?? -1) || (a.card.cost || 0) - (b.card.cost || 0));
   }
-  ns.analysis = { size, replay, drawProbability, moneyDistribution, actionComposition, metrics, recommendations, deriveDraw, validCount };
+  ns.analysis = { size, replay, drawProbability, drawProbabilityAfterShuffle, deriveDrawModel, moneyDistribution, actionComposition, metrics, recommendations, deriveDraw, validCount };
 })();
