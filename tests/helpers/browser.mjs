@@ -33,7 +33,8 @@ export async function launchBrowser(executable) {
       child.kill('SIGKILL');
       await exited;
     }
-    await rm(profile, { recursive: true, force: true });
+    // Chromium subprocesses can briefly finish writing after the main process exits.
+    await rm(profile, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 });
   }
   try {
     const endpoint = await new Promise((resolve, reject) => {
