@@ -1,11 +1,12 @@
-import { mkdir, readFile, rm } from 'node:fs/promises';
+import { mkdir, rm } from 'node:fs/promises';
 import path from 'node:path';
 import { execFileSync } from 'node:child_process';
+import { checkBuildInfo } from './build-info.mjs';
 const root = path.resolve(import.meta.dirname, '..');
 const out = path.join(root, 'dist');
 await mkdir(out, { recursive: true });
-const { version } = JSON.parse(await readFile(path.join(root, 'extension', 'manifest.json'), 'utf8'));
-const zip = path.join(out, `dominion-lens-${version}.zip`);
+const { version, build } = await checkBuildInfo(root);
+const zip = path.join(out, `dominion-lens-${version}-${build}.zip`);
 await rm(zip, { force: true });
 execFileSync('zip', ['-qr', zip, '.', '-x', '*.DS_Store'], { cwd: path.join(root, 'extension') });
 console.log(zip);
