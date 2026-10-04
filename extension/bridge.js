@@ -7,9 +7,9 @@
   if (ns.bridgeStarted) return;
   ns.bridgeStarted = true;
   const discards = new ns.DiscardTracker();
-  let lastPayload = "", wrapped = false;
+  let lastPayload = "", wrapped = false, lastReady = null;
   const channel = "dominion-lens:snapshot:v1";
-  const logTypes = new Set(["STARTS_WITH", "GAIN", "GAIN_WITH", "BUY_AND_GAIN", "TRASH", "TRASH_WITH", "EXCHANGE_RETURN", "EXCHANGE_RECEIVE", "RETURN_TO", "PASS", "GAIN_ON_DRAWPILE", "GAIN_FROM_TRASH", "GAIN_ANOTHER_EXPERIMENT", "RECEIVES", "RETURN", "TAKE"]);
+  const logTypes = new Set(["NEW_TURN", "BUY", "STARTS_WITH", "GAIN", "GAIN_WITH", "BUY_AND_GAIN", "TRASH", "TRASH_WITH", "EXCHANGE_RETURN", "EXCHANGE_RECEIVE", "RETURN_TO", "PASS", "GAIN_ON_DRAWPILE", "GAIN_FROM_TRASH", "GAIN_ANOTHER_EXPERIMENT", "RECEIVES", "RETURN", "TAKE"]);
   function globalsReady() { return typeof angular !== "undefined" && typeof CardNames !== "undefined" && typeof LogEntryNames !== "undefined"; }
   function enumKey(object, value) { return Object.keys(object).find(key => object[key] === value); }
   function cardName(card) { const name = card?.cardName?.name; return name && name !== "Back" ? name : null; }
@@ -41,13 +41,20 @@
   }
   function extractLogs(game) {
     const keyMap = new Map(Object.entries(LogEntryNames).map(([key, value]) => [value, key]));
-    return (game.logModel.entries || []).flatMap(entry => {
+    let turn = null;
+    return [...(game.logModel.entries || [])].sort((a, b) => a.index - b.index).flatMap(entry => {
       const type = keyMap.get(entry.name);
       if (!logTypes.has(type)) return [];
       const args = entry.logArguments || [];
+      if (type === "NEW_TURN") {
+        // NEW_TURN carries a public LoggedTurn as argument 0 in client 2.3.4.
+        const description = args[0]?.argument;
+        turn = Number.isSafeInteger(description?.turnNumber) && description.turnNumber >= 0 ? description.turnNumber : null;
+        return [{ index: entry.index, type, player: description?.ownerId ?? null, cards: [], toPlayer: null, turn }];
+      }
       const player = typeof args[0]?.argument === "number" ? args[0].argument : null;
       const cards = Array.isArray(args[1]?.argument) ? args[1].argument.filter(c => c?.cardName?.name && Number.isInteger(c.frequency)).map(c => ({ name: c.cardName.name, count: c.frequency })) : [];
-      return [{ index: entry.index, type, player, cards, toPlayer: type === "PASS" ? args[2]?.argument : null }];
+      return [{ index: entry.index, type, player, cards, toPlayer: type === "PASS" ? args[2]?.argument : null, turn }];
     });
   }
   function knownCards(zones) {
@@ -82,8 +89,17 @@
     const injector = angular.element(document.body).injector();
     if (!injector) return { status: "waiting", message: "サイトへの接続を待っています。" };
     const game = injector.get("game");
-    if (!game.isRunning() || !game.state?.players?.length) return { status: "waiting", message: "ログインして、友達またはCPUとのゲームを開始してください。" };
-    if (game.logModel?.isRated) return { status: "rated", message: "レート戦では分析表示を停止しています。" };
+    if (!game.isRunning() || !game.state?.players?.length) {
+      // The client can become inactive between polls while its final public log
+      // is still available. Capture it once before announcing the waiting state.
+      if (!game.logModel?.isRated && lastReady && lastReady.gameId === String(game.displayedGameId) && Array.isArray(game.logModel?.entries)) {
+        const final = { ...lastReady, logs: extractLogs(game), turn: game.state?.activeTurn?.turnNumber ?? lastReady.turn, ended: true };
+        lastReady = null; return final;
+      }
+      lastReady = null;
+      return { status: "waiting", message: "ログインして、友達またはCPUとのゲームを開始してください。" };
+    }
+    if (game.logModel?.isRated) { lastReady = null; return { status: "rated", message: "レート戦では分析表示を停止しています。" }; }
     // Poll only after the animation queue settles, so log and zones represent the same moment.
     if (game.animationDirector?.queueElements?.length) return null;
     discards.begin(game.state);
@@ -96,14 +112,22 @@
       return { ...meta, cost: top?.cost?.coin ?? meta.cost, potion: top?.cost?.potion ?? meta.potion,
         debt: top?.cost?.debt ?? meta.debt, remaining: zone.cardStacks.reduce((n, s) => n + s.cards.length + s.anonymousCards, 0) };
     });
-    return { status: "ready", gameId: String(game.displayedGameId), turn: game.state.activeTurn.turnNumber,
+    lastReady = { status: "ready", gameId: String(game.displayedGameId), turn: game.state.activeTurn.turnNumber,
       players: game.state.players.map(p => ({ index: p.index, name: p.name, isMe: p.isMe })),
       logs: extractLogs(game), metadata: cardMetadata, supply,
       ownZones: game.state.players.map(ownedZones).filter(Boolean) };
+    return lastReady;
   }
   function publish(force = false) {
     try {
       const data = snapshot(); if (!data) return;
+      if (data.ended) {
+        window.postMessage({ channel, data }, location.origin);
+        const waiting = { status: "waiting", message: "対戦が終了しました。取得済みの対戦ログは「履歴」で確認できます。" };
+        lastPayload = JSON.stringify(waiting);
+        window.postMessage({ channel, data: waiting }, location.origin);
+        return;
+      }
       const payload = JSON.stringify(data);
       if (force || payload !== lastPayload) { lastPayload = payload; window.postMessage({ channel, data }, location.origin); }
     } catch {

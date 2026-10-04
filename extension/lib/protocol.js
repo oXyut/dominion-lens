@@ -12,13 +12,14 @@
   function validSnapshot(data) {
     if (!object(data) || !["ready", "rated", "waiting", "error"].includes(data.status)) return false;
     if (data.status !== "ready") return text(data.message, 1000);
-    return text(data.gameId) && count(data.turn)
+    return text(data.gameId) && count(data.turn) && (data.ended === undefined || typeof data.ended === "boolean")
       && Array.isArray(data.players) && data.players.length > 0 && data.players.length <= 6
       && data.players.every(p => object(p) && index(p.index) && text(p.name) && typeof p.isMe === "boolean")
       && new Set(data.players.map(p => p.index)).size === data.players.length
       && Array.isArray(data.logs) && data.logs.length <= 100000
       && data.logs.every(e => object(e) && Number.isSafeInteger(e.index) && e.index >= 0 && text(e.type, 80)
         && (e.player === null || index(e.player)) && (e.toPlayer === null || e.toPlayer === undefined || index(e.toPlayer))
+        && (e.turn === undefined || e.turn === null || count(e.turn))
         && Array.isArray(e.cards) && e.cards.length <= 2000 && e.cards.every(c => object(c) && text(c.name) && count(c.count)))
       && object(data.metadata) && Object.keys(data.metadata).length <= 2000 && Object.entries(data.metadata).every(([name, c]) => text(name) && meta(c))
       && Array.isArray(data.supply) && data.supply.length <= 200

@@ -8,7 +8,7 @@ function fixture() {
   const types = { TREASURE: {}, VICTORY: {}, ACTION: {} };
   const card = (name, type, coin, base) => ({ name, types: [types[type]], cost: { coin, debt: 0, potion: 0 }, isBaseCard: () => base });
   const cards = { Copper: card('Copper', 'TREASURE', 0, true), Estate: card('Estate', 'VICTORY', 2, true), Village: card('Village', 'ACTION', 3, false) };
-  const names = { STARTS_WITH: {}, GAIN: {}, TRASH: {}, PASS: {} };
+  const names = { STARTS_WITH: {}, GAIN: {}, TRASH: {}, PASS: {}, NEW_TURN: {}, BUY: {} };
   class SupplyZone { constructor(c) { this.pileName = c; this.cardStacks = [{ topCard: { cardName: c, cost: c.cost }, cards: Array(10).fill({ cardName: c }), anonymousCards: 0 }]; } }
   class CardMove { execute() { this.called = true; return 73; } }
   class PilesStatus { execute() { this.called = true; return 42; } }
@@ -112,4 +112,35 @@ test('animations delay snapshots and only same-window requests trigger publishin
   request({ source: {}, origin: 'https://dominion.games', data: { channel: 'dominion-lens:request:v1' } }); assert.equal(f.output.length, 1);
   request({ source: f.window, origin: 'https://evil.example', data: { channel: 'dominion-lens:request:v1' } }); assert.equal(f.output.length, 1);
   request({ source: f.window, origin: 'https://dominion.games', data: { channel: 'dominion-lens:request:v1' } }); assert.equal(f.output.length, 2);
+});
+test('public turn descriptions and purchases retain log order without double-counting ownership', () => {
+  const f = fixture(), names = f.context.LogEntryNames;
+  f.game.logModel.entries.push(
+    { index: 1, name: names.NEW_TURN, logArguments: [{ argument: { ownerId: 0, turnNumber: 2, controllerId: 0 } }] },
+    { index: 2, name: names.BUY, logArguments: [{ argument: 0 }, { argument: [{ cardName: f.cards.Village, frequency: 1 }] }] },
+    { index: 3, name: names.GAIN, logArguments: [{ argument: 0 }, { argument: [{ cardName: f.cards.Village, frequency: 1 }] }] }
+  );
+  f.poll();
+  const data = f.output.at(-1).data;
+  assert.equal(f.context.DominionLens.validSnapshot(data), true);
+  assert.deepEqual(Array.from(data.logs, e => e.turn), [null, 2, 2, 2]);
+  assert.equal(data.logs[1].player, 0);
+  vm.runInContext(src('lib/catalog.js'), f.context); vm.runInContext(src('lib/analysis.js'), f.context);
+  assert.equal(f.context.DominionLens.analysis.replay(data.players, data.logs)[0].counts.Village, 1);
+});
+test('transition to waiting publishes the final acquired log once and never publishes a rated final snapshot', () => {
+  const f = fixture();
+  f.game.logModel.entries.push({ index: 1, name: f.context.LogEntryNames.TRASH,
+    logArguments: [{ argument: 0 }, { argument: [{ cardName: f.cards.Copper, frequency: 1 }] }] });
+  f.game.isRunning = () => false; f.poll();
+  const final = f.output.at(-2).data;
+  assert.equal(final.status, 'ready'); assert.equal(final.ended, true);
+  assert.equal(final.logs.at(-1).type, 'TRASH');
+  assert.equal(f.context.DominionLens.validSnapshot(final), true);
+  assert.equal(f.output.at(-1).data.status, 'waiting');
+  f.poll(); f.poll();
+  assert.equal(f.output.filter(e => e.data.ended).length, 1);
+  const rated = fixture(); rated.game.logModel.isRated = true; rated.game.isRunning = () => false; rated.poll();
+  assert.equal(rated.output.at(-1).data.status, 'waiting');
+  assert.equal(rated.output.some(e => e.data.ended), false);
 });

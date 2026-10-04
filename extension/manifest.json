@@ -5,6 +5,7 @@
   "description": "dominion.games の友達・CPU戦でデッキ内訳、アクションエンド・コンボの割合、財宝の期待金量、ドロー確率、王国カードの評価を表示します。",
   "minimum_chrome_version": "111",
   "permissions": ["storage"],
+  "background": { "service_worker": "background.js" },
   "content_scripts": [
     {
       "matches": ["https://dominion.games/*", "https://www.dominion.games/*"],
@@ -14,7 +15,7 @@
     },
     {
       "matches": ["https://dominion.games/*", "https://www.dominion.games/*"],
-      "js": ["lib/catalog.js", "lib/analysis.js", "lib/protocol.js", "lib/view.js", "content.js"],
+      "js": ["lib/catalog.js", "lib/analysis.js", "lib/protocol.js", "lib/history.js", "lib/view.js", "content.js"],
       "run_at": "document_idle"
     }
   ]
