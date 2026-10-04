@@ -18,23 +18,29 @@ export function chromeExecutable() {
 }
 
 // Use a separate process and temporary profile; never connect to an existing browser.
-export async function launchBrowser(executable) {
-  const profile = await mkdtemp(path.join(tmpdir(), 'dominion-lens-panel-'));
+export async function launchBrowser(executable, { profile: existingProfile, extensionTesting = false } = {}) {
+  const profile = existingProfile || await mkdtemp(path.join(tmpdir(), 'dominion-lens-panel-'));
   const child = spawn(executable, [
     '--headless', '--no-first-run', '--no-default-browser-check', '--disable-background-networking',
     '--disable-component-update', '--disable-sync', '--window-size=1280,1000',
-    '--remote-debugging-address=127.0.0.1', '--remote-debugging-port=0', `--user-data-dir=${profile}`, 'about:blank'
+    '--remote-debugging-address=127.0.0.1', '--remote-debugging-port=0', `--user-data-dir=${profile}`,
+    ...(extensionTesting ? ['--enable-unsafe-extension-debugging'] : []), 'about:blank'
   ], { stdio: ['ignore', 'ignore', 'pipe'] });
   let socket;
   async function close() {
-    socket?.close();
     if (child.exitCode === null && child.signalCode === null) {
       const exited = once(child, 'exit');
-      child.kill('SIGKILL');
-      await exited;
+      if (existingProfile && socket?.readyState === WebSocket.OPEN) {
+        // A graceful shutdown flushes real extension storage before restarting
+        // a test-owned temporary profile. Never use a user's Chrome profile.
+        socket.send(JSON.stringify({ id: 0, method: 'Browser.close' }));
+      } else child.kill('SIGKILL');
+      const fallback = setTimeout(() => child.kill('SIGKILL'), 3000);
+      await exited; clearTimeout(fallback);
     }
+    socket?.close();
     // Chromium subprocesses can briefly finish writing after the main process exits.
-    await rm(profile, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 });
+    if (!existingProfile) await rm(profile, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 });
   }
   try {
     const endpoint = await new Promise((resolve, reject) => {
@@ -52,8 +58,11 @@ export async function launchBrowser(executable) {
     await once(socket, 'open');
     let sequence = 0;
     const pending = new Map();
+    const listeners = new Map();
     socket.addEventListener('message', event => {
-      const message = JSON.parse(event.data), request = pending.get(message.id);
+      const message = JSON.parse(event.data);
+      if (message.method) for (const listener of listeners.get(message.method) || []) listener(message.params, message.sessionId);
+      const request = pending.get(message.id);
       if (!request) return;
       pending.delete(message.id); clearTimeout(request.timer);
       if (message.error) request.reject(new Error(message.error.message));
@@ -89,7 +98,8 @@ export async function launchBrowser(executable) {
       await command('Input.dispatchKeyEvent', { type: 'keyUp', key, code, windowsVirtualKeyCode });
       await evaluate('new Promise(resolve => setTimeout(resolve, 0))');
     };
-    return { evaluate, command, click, key, close };
+    const onEvent = (method, listener) => { const list = listeners.get(method) || []; list.push(listener); listeners.set(method, list); };
+    return { evaluate, command, browserCommand: send, onEvent, click, key, close };
   } catch (error) {
     await close();
     throw error;
