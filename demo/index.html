@@ -1,0 +1,23 @@
+<!doctype html>
+<html lang="ja">
+<head>
+  <meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>Dominion Lens — 動作デモ</title>
+  <link rel="stylesheet" href="/demo/demo.css">
+</head>
+<body>
+  <main class="stage">
+    <div class="demo-badge">DOMINION LENS / INTERACTIVE DEMO</div>
+    <h1>カードを数える時間を、<br>次の一手を考える時間へ。</h1>
+    <p class="lead">右側の分析パネルは、拡張機能と同じ画面・計算処理で動いています。<br>下の操作でカードを増減し、金量や購入候補の変化を試せます。</p>
+    <div class="controls"><button id="gain">銀貨を獲得</button><button id="trash">手札の銅貨を廃棄</button><button id="shuffle">捨て札をシャッフル</button><button id="undo" disabled>操作を巻き戻す</button><button id="reset">初期状態に戻す</button></div>
+    <p id="feedback" role="status">サンプル対戦を表示しています。実際の対戦には接続していません。</p>
+    <section class="board" aria-label="サンプルの王国"><div class="board-heading"><span>KINGDOM / TURN 09</span><span>YOU × CPU</span></div><div class="kingdom-cards" id="kingdom"></div><div class="table-footer">PLAY AREA<span>サンプル画面</span></div></section>
+    <section class="instructions"><b>実際の対戦で使う</b><p>Chromeの <code>chrome://extensions</code> でデベロッパーモードを有効にし、<code>extension</code> フォルダを「パッケージ化されていない拡張機能を読み込む」から選択してください。</p></section>
+  </main>
+  <script src="../extension/lib/catalog.js"></script>
+  <script src="../extension/lib/analysis.js"></script>
+  <script src="../extension/lib/view.js"></script>
+  <script src="/demo/demo.js"></script>
+</body>
+</html>
