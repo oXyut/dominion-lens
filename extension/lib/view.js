@@ -28,6 +28,20 @@
       this.root = host.attachShadow({ mode: "open" });
       this.settings = { tab: "deck", zone: "owned", draws: 5, minimized: false, basic: false, budget: "", ...settings };
       this.snapshot = { status: "waiting" }; this.onChange = onChange || (() => {});
+      this.pendingUpdate = false;
+      this.pointerAction = false;
+      this.root.addEventListener("pointerdown", event => {
+        if (!this.root.activeElement?.matches('input[type="number"]') || !event.target.closest("button[data-action], input[type=checkbox], label")) return;
+        // Keep pressed controls in the DOM until their click/change actions run.
+        this.pointerAction = true;
+        const finish = () => {
+          document.removeEventListener("pointerup", finish);
+          document.removeEventListener("pointercancel", finish);
+          setTimeout(() => { this.pointerAction = false; this.flushPendingUpdate(); }, 0);
+        };
+        document.addEventListener("pointerup", finish);
+        document.addEventListener("pointercancel", finish);
+      });
       this.root.addEventListener("click", event => {
         const button = event.target.closest("button[data-action]"); if (!button) return;
         const { action, value } = button.dataset;
@@ -42,7 +56,16 @@
         else if (key === "basic") this.settings.basic = event.target.checked;
         else if (key === "player") { this.settings.player = Number(event.target.value); this.settings.zone = "owned"; }
         else if (key === "budget") this.settings.budget = event.target.value === "" ? "" : Math.min(100, Math.max(0, Number(event.target.value) || 0));
-        this.render(); this.onChange(this.settings);
+        if (this.snapshot.status === "ready" && (this.pointerAction || event.target.matches('input[type="number"]'))) {
+          this.pendingUpdate = true;
+          setTimeout(() => this.flushPendingUpdate(), 0);
+        } else this.render();
+        this.onChange(this.settings);
+      });
+      this.root.addEventListener("focusout", event => {
+        if (!event.target.matches('input[type="number"]')) return;
+        // Wait for the browser to finish moving keyboard/pointer focus first.
+        setTimeout(() => this.flushPendingUpdate(), 0);
       });
       this.root.addEventListener("keydown", event => {
         if (event.target.getAttribute("role") !== "tab") return;
@@ -57,12 +80,19 @@
     update(snapshot) {
       this.snapshot = snapshot;
       // Let a user finish editing a number while automatic game updates arrive.
-      if (this.root.activeElement?.matches('input[type="number"]') && snapshot.status === "ready") return;
+      if (snapshot.status === "ready" && (this.pointerAction || this.root.activeElement?.matches('input[type="number"]'))) {
+        this.pendingUpdate = true; return;
+      }
       this.render();
     }
+    flushPendingUpdate() {
+      if (this.pendingUpdate && !this.pointerAction && !this.root.activeElement?.matches('input[type="number"]')) this.render();
+    }
     render() {
+      this.pendingUpdate = false;
       const scroll = this.root.querySelector("main")?.scrollTop || 0;
       const focus = this.root.activeElement?.dataset?.key;
+      const button = this.root.activeElement?.closest("button[data-action]")?.dataset;
       const expanded = [...this.root.querySelectorAll("details[open][data-card]")].map(d => d.dataset.card);
       const { settings: s, snapshot: data } = this;
       if (s.minimized) { this.root.innerHTML = `<style>${css}</style><button class="pill" data-action="minimize" aria-label="Dominion Lensを開く">${symbol}Dominion Lens</button>`; return; }
@@ -83,6 +113,7 @@
       this.root.querySelector("main").scrollTop = scroll;
       for (const details of this.root.querySelectorAll("details[data-card]")) if (expanded.includes(details.dataset.card)) details.open = true;
       if (focus) this.root.querySelector(`[data-key="${focus}"]`)?.focus({ preventScroll: true });
+      else if (button) this.root.querySelector(`button[data-action="${button.action}"]${button.value ? `[data-value="${button.value}"]` : ""}`)?.focus({ preventScroll: true });
     }
     deck(player, own) {
       const { snapshot: data, settings: s } = this;
