@@ -36,6 +36,37 @@ test('adapter reads current typed logs and zones without double-counting draw st
   assert.equal(data.metadata.Copper.types[0], 'TREASURE');
   f.poll(); assert.equal(f.output.length, 1, 'unchanged snapshots are not emitted repeatedly');
 });
+test('adapter and replay retain separate starting entries through trash and undo', () => {
+  const f = fixture();
+  vm.runInContext(src('lib/catalog.js'), f.context);
+  vm.runInContext(src('lib/analysis.js'), f.context);
+  const names = f.game.logModel.entries[0].name;
+  const entry = (index, name, card, frequency) => ({ index, name, logArguments: [
+    { argument: 0 }, { argument: [{ cardName: card, frequency }] }
+  ] });
+  f.game.logModel.entries = [entry(0, names, f.cards.Estate, 3), entry(1, names, f.cards.Copper, 7)];
+  f.poll();
+  const replay = () => {
+    const data = f.output.at(-1).data;
+    assert.equal(f.context.DominionLens.validSnapshot(data), true);
+    return f.context.DominionLens.analysis.replay(data.players, data.logs)[0];
+  };
+  assert.equal(f.output.at(-1).data.logs.length, 2);
+  assert.equal(replay().counts.Estate, 3);
+  assert.equal(replay().counts.Copper, 7);
+  assert.equal(f.context.DominionLens.analysis.metrics(replay().counts).money.expected, 3.5);
+  f.game.logModel.entries.push(entry(2, f.context.LogEntryNames.TRASH, f.cards.Estate, 1));
+  f.poll();
+  assert.equal(replay().counts.Estate, 2);
+  assert.equal(replay().complete, true);
+  assert.equal(replay().issues.length, 0);
+  // Repeated polling and a forced publication must not accumulate counts.
+  f.poll();
+  f.listeners.get('message')({ source: f.window, origin: 'https://dominion.games', data: { channel: 'dominion-lens:request:v1' } });
+  assert.equal(replay().counts.Estate, 2);
+  f.game.logModel.entries.pop(); f.poll();
+  assert.equal(replay().counts.Estate, 3);
+});
 test('malformed metadata, zones, card counts and duplicate players are rejected', () => {
   const f = fixture(), valid = f.context.DominionLens.validSnapshot;
   const data = JSON.parse(JSON.stringify(f.output.at(-1).data));

@@ -74,6 +74,47 @@ test('replay counts purchases once, trash, exchanges, return and pass', () => {
   assert.deepEqual(plain(result[1].counts), { Copper: 7, Estate: 3, Silver: 1 });
   assert.equal(result[0].complete, true);
 });
+test('split starting-card entries accumulate for every player before gains and trash', () => {
+  const threePlayers = [...players, { index: 2, isMe: false }];
+  const logs = [
+    event(0, 'STARTS_WITH', 0, 'Estate', 3),
+    event(1, 'STARTS_WITH', 1, 'Copper', 7),
+    event(2, 'STARTS_WITH', 2, 'Estate', 3),
+    event(3, 'STARTS_WITH', 0, 'Copper', 7),
+    event(4, 'STARTS_WITH', 1, 'Estate', 3),
+    event(5, 'STARTS_WITH', 2, 'Copper', 7)
+  ];
+  const initial = a.replay(threePlayers, [...logs].reverse());
+  for (const p of initial) {
+    assert.deepEqual(plain(p.counts), p.index === 1 ? { Copper: 7, Estate: 3 } : { Estate: 3, Copper: 7 });
+    assert.equal(p.complete, true);
+    assert.equal(a.size(p.counts), 10);
+    assert.equal(a.metrics(p.counts).money.expected, 3.5);
+  }
+  logs.push(event(6, 'BUY_AND_GAIN', 0, 'Silver'), event(7, 'TRASH', 0, 'Estate'),
+    event(8, 'TRASH', 1, 'Estate'), event(9, 'TRASH', 2, 'Copper', 2));
+  const result = a.replay(threePlayers, logs);
+  assert.deepEqual(plain(result[0].counts), { Estate: 2, Copper: 7, Silver: 1 });
+  assert.deepEqual(plain(result[1].counts), { Copper: 7, Estate: 2 });
+  assert.deepEqual(plain(result[2].counts), { Estate: 3, Copper: 5 });
+  for (const p of result) { assert.equal(p.complete, true); assert.deepEqual(plain(p.issues), []); }
+  // Full replay remains stateless across polling, undo and the next game.
+  assert.deepEqual(plain(a.replay(threePlayers, logs)), plain(result));
+  assert.equal(a.replay(threePlayers, logs.slice(0, 6))[0].counts.Silver, undefined);
+  assert.deepEqual(plain(a.replay(players, [start(0)])[0].counts), { Copper: 7, Estate: 3 });
+});
+test('split starts support nonstandard decks and do not suppress impossible-loss warnings', () => {
+  const logs = [event(0, 'STARTS_WITH', 0, 'Estate', 3), event(1, 'STARTS_WITH', 0, 'Copper', 4),
+    event(2, 'STARTS_WITH', 0, 'Necropolis'), event(3, 'STARTS_WITH', 0, 'Overgrown Estate'),
+    event(4, 'STARTS_WITH', 0, 'Hovel')];
+  const p = a.replay(players, logs)[0];
+  assert.deepEqual(plain(p.counts), { Estate: 3, Copper: 4, Necropolis: 1, 'Overgrown Estate': 1, Hovel: 1 });
+  assert.equal(p.complete, true);
+  const bad = a.replay(players, [...logs, event(5, 'TRASH', 0, 'Gold'), event(6, 'STARTS_WITH', 0, 'Silver')])[0];
+  assert.equal(bad.complete, false);
+  assert.equal(bad.issues.length, 1);
+  assert.equal(bad.counts.Estate, 3);
+});
 test('undo and a new game discard removed gains instead of double counting', () => {
   const logs = [start(0), event(1, 'GAIN', 0, 'Gold')];
   assert.equal(a.replay(players, logs)[0].counts.Gold, 1);

@@ -21,7 +21,10 @@
       if (!p) continue;
       const cards = (entry.cards || []).filter(c => typeof c.name === "string" && validCount(c.count));
       if (entry.type === "STARTS_WITH") {
-        p.counts = bag(); p.initialized = true; p.issues.clear();
+        // The live client emits starting cards in separate entries (e.g.
+        // Estates, then Coppers). Each entry adds to this replay's fresh bag;
+        // resetting here would erase the cards from earlier starting entries.
+        p.initialized = true;
         for (const c of cards) change(p.counts, c.name, c.count);
       } else if (gainTypes.has(entry.type) || lossTypes.has(entry.type)) {
         for (const c of cards) change(p.counts, c.name, c.count * (gainTypes.has(entry.type) ? 1 : -1), p.issues);

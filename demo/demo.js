@@ -2,8 +2,9 @@
   const names = ["Chapel", "Village", "Smithy", "Witch", "Market", "Sentry", "Moat", "Festival", "Merchant", "Moneylender"];
   const starting = [{ name: "Copper", count: 7 }, { name: "Estate", count: 3 }];
   function initial() {
-    const logs = [0, 1].map(player => ({ index: player, type: "STARTS_WITH", player, cards: structuredClone(starting) }));
-    let index = 2;
+    let index = 0;
+    // Mirror the live site's separate starting-card entries.
+    const logs = [0, 1].flatMap(player => starting.map(card => ({ index: index++, type: "STARTS_WITH", player, cards: [structuredClone(card)] })));
     const push = (player, type, name, count) => logs.push({ index: index++, player, type, cards: [{ name, count }] });
     push(0, "TRASH", "Copper", 2); push(0, "TRASH", "Estate", 2);
     for (const [name, count] of [["Silver", 3], ["Gold", 1], ["Chapel", 1], ["Village", 2], ["Smithy", 2], ["Market", 1], ["Sentry", 1], ["Province", 1]]) push(0, "BUY_AND_GAIN", name, count);
