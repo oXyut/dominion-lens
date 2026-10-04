@@ -146,6 +146,32 @@ test('recommendations react to curse exhaustion, village need and late victory',
   assert.ok(score(a.recommendations(supply, { Gold: 5 }), 'Moneylender') < score(base, 'Moneylender'));
   assert.equal(a.recommendations([{ name: 'Unknown', remaining: 10 }], {})[0].score, null);
 });
+test('empty supplies keep evaluation support separate from availability', () => {
+  const recs = a.recommendations([{ name: 'Village', remaining: 0 }, { name: 'Expansion', remaining: 0 }], { Copper: 7, Estate: 3 });
+  for (const rec of recs) {
+    assert.equal(rec.availability, 'empty');
+    assert.equal(rec.score, null);
+    assert.deepEqual(plain(rec.reasons), ['このサプライは空です。']);
+  }
+  assert.equal(recs.find(r => r.name === 'Village').evaluation, 'supported');
+  assert.equal(recs.find(r => r.name === 'Expansion').evaluation, 'unsupported');
+});
+test('restoring supply counts restores scored and unsupported recommendations without stale state', () => {
+  const supply = [{ name: 'Village', remaining: 1 }, { name: 'Expansion', remaining: 1 }];
+  const counts = { Copper: 7, Estate: 3 }, initial = plain(a.recommendations(supply, counts));
+  for (let i = 0; i < 2; i++) {
+    for (const pile of supply) pile.remaining = 0;
+    assert.ok(a.recommendations(supply, counts).every(r => r.availability === 'empty'));
+    for (const pile of supply) pile.remaining = 1;
+    const restored = a.recommendations(supply, counts);
+    assert.deepEqual(plain(restored), initial);
+    assert.equal(restored.find(r => r.name === 'Village').availability, 'available');
+    assert.equal(typeof restored.find(r => r.name === 'Village').score, 'number');
+    const unsupported = restored.find(r => r.name === 'Expansion');
+    assert.equal(unsupported.evaluation, 'unsupported');
+    assert.deepEqual(plain(unsupported.reasons), ['このカードの評価データはまだありません。']);
+  }
+});
 test('discard observer handles known/unknown moves, reshuffle, and a state reset', () => {
   const tracker = new DiscardTracker();
   const state = { zones: [{ index: 2, zoneName: 'DiscardZone', cardStacks: [] }] };
